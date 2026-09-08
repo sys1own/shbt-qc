@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+build/
+docs/paper/*.aux
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.toc
+docs/paper/*.fls
+docs/paper/*.fdb_latexmk
+docs/paper/*.synctex.gz
