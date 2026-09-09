@@ -4,6 +4,7 @@ __pycache__/
 *.pyd
 .Python
 *.so
+tests/reference_test
 build/
 docs/paper/*.aux
 docs/paper/*.log
