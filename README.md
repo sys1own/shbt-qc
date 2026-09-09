@@ -144,7 +144,7 @@ python3 tests/run_all_tests.py
 
 ```bash
 # 1. Test freestanding C microkernel reference driver
-gcc -O3 -std=c11 -I kernel/include tests/reference_test.c kernel/src/shbt_user_mmio.c -o ref_test && ./ref_test
+gcc -O3 -std=c11 -I kernel/include tests/reference_test.c -o ref_test && ./ref_test
 
 # 2. Run Z3 formal verification proofs
 python3 formal/formal_verification.py
