@@ -153,5 +153,3 @@ python3 formal/formal_verification.py
 pytest simulator/hil_qec/test_closed_loop_quench.py
 
 ```
-
-```
