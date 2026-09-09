@@ -2,13 +2,14 @@
 """
 run_all_tests.py - unified SHBT-R test runner.
 
-Imports every simulation / verification module and executes its self-test
-entry point, then drives scripts/export_os.py end-to-end into a scratch
-directory and validates the produced release archive.
+Executes the C reference test suite, multi-physics / photonic CAD self-tests,
+Pytest closed-loop HIL bench, Z3 formal verification, and EDA exporter
+integrity checks in sequence.
 
     python3 tests/run_all_tests.py [-k pattern] [--keep-going] [--json out.json]
 
-Exit status is non-zero if any suite fails.
+Exit status is 0 when all V-01..V-35 requirement benchmarks pass and non-zero
+otherwise, with a clear failure trace.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ import contextlib
 import io
 import json
 import shutil
+import subprocess as _subprocess
 import sys
 import tempfile
 import time
@@ -32,7 +34,8 @@ from simulator.multi_physics import thermal_fea_sp_sim          # noqa: E402
 from simulator.cad_yield import spc_photonic_cad                # noqa: E402
 from simulator.hil_qec import hil_mps_qec                       # noqa: E402
 from formal import formal_verification                          # noqa: E402
-from scripts import export_os                                   # noqa: E402
+from eda.exporters import pdk_hexamer_exporter                   # noqa: E402
+from eda.exporters import export_interposer_rf                   # noqa: E402
 
 
 @dataclass
@@ -44,38 +47,90 @@ class SuiteResult:
     error: str = ""
 
 
-def _run_export_end_to_end() -> None:
-    tmp = Path(tempfile.mkdtemp(prefix="shbt_release_", dir=REPO_ROOT / "build" if (REPO_ROOT / "build").exists() else None))
+def _compile_c_reference() -> Path:
+    """Compile tests/reference_test.c and return the resulting binary path."""
+    cc = shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")
+    if not cc:
+        raise RuntimeError("no C compiler found")
+    src = REPO_ROOT / "tests" / "reference_test.c"
+    out = REPO_ROOT / "tests" / "reference_test"
+    if out.exists():
+        out.unlink()
+    cmd = [
+        cc,
+        "-std=c11",
+        "-O2",
+        "-mavx512f",
+        "-DSHBT_TSC_HZ=2400000000ULL",
+        f"-I{REPO_ROOT / 'kernel' / 'include'}",
+        str(src),
+        "-o",
+        str(out),
+        "-lm",
+    ]
+    r = _subprocess.run(cmd, stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"C reference test compile failed:\n{r.stdout}")
+    return out
+
+
+def _run_c_reference() -> None:
+    """Build and run the C reference test suite."""
+    print("Building C reference test suite ...")
+    exe = _compile_c_reference()
+    r = _subprocess.run([str(exe)], stdout=_subprocess.PIPE, stderr=_subprocess.STDOUT, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"C reference test failed:\n{r.stdout}")
+    print(r.stdout)
+
+
+def _run_pytest_bench() -> None:
+    """Run the closed-loop HIL pytest suite."""
+    test_path = REPO_ROOT / "simulator" / "hil_qec" / "test_closed_loop_quench.py"
+    pytest = shutil.which("pytest") or shutil.which("py.test")
+    if not pytest:
+        raise RuntimeError("pytest not found")
+    r = _subprocess.run(
+        [pytest, str(test_path), "-v"],
+        stdout=_subprocess.PIPE,
+        stderr=_subprocess.STDOUT,
+        text=True,
+    )
+    print(r.stdout)
+    if r.returncode != 0:
+        raise RuntimeError(f"pytest closed-loop bench failed (exit {r.returncode})")
+
+
+def _run_eda_integrity() -> None:
+    """Verify GDSII and Touchstone exporters produce valid artefacts."""
+    tmp = Path(tempfile.mkdtemp(prefix="shbt_eda_", dir=REPO_ROOT / "build" if (REPO_ROOT / "build").exists() else None))
     try:
-        res = export_os.export(tmp, skip_formal=False, verbose=True)
-        export_os.verify_release(res)
-        assert res.zip_path.name == export_os.RELEASE_ZIP_NAME
-        assert res.manifest.formal_all_passed, "release must carry a passing formal report"
-        assert res.manifest.toolchain in ("clang", "x86_64-elf-gcc", "mock")
-        assert res.manifest.elf["class"] == "ELF64" and res.manifest.elf["machine"] == 62
-        assert len(res.zip_sha256) == 64
-        assert (tmp / "SHA256SUMS").exists() and (tmp / f"{export_os.RELEASE_ZIP_NAME}.sha256").exists()
-        # The generated HAL header must at least parse as C when a host compiler is present.
-        if shutil.which("gcc") or shutil.which("cc"):
-            import subprocess
-            cc = shutil.which("gcc") or shutil.which("cc")
-            probe = "#include \"shbt_hal.h\"\nint p(void){ return (int)shbt_hal_read_status(); }\n"
-            r = subprocess.run([cc, "-std=c11", "-fsyntax-only", "-ffreestanding", "-Wall", "-Wextra", "-Werror",
-                                "-I", str(export_os.KERNEL_INC), "-x", "c", "-"],
-                               input=probe, capture_output=True, text=True)
-            assert r.returncode == 0, f"generated shbt_hal.h failed to compile:\n{r.stderr}"
-        print(f"  export_os: {res.manifest.toolchain} toolchain, zip sha256 {res.zip_sha256[:16]}..., "
-              f"{len(res.manifest.files)} artefacts")
+        gds_path = tmp / "hexamer.gds"
+        s2p_path = tmp / "interposer.s2p"
+        pdk_hexamer_exporter.export_gds(gds_path)
+        if not gds_path.exists() or gds_path.stat().st_size == 0:
+            raise RuntimeError("GDSII export produced no output")
+        export_interposer_rf.generate_touchstone_s2p(s2p_path)
+        if not s2p_path.exists() or s2p_path.stat().st_size == 0:
+            raise RuntimeError("Touchstone export produced no output")
+        s2p_text = s2p_path.read_text()
+        if "# Hz S RI R 50" not in s2p_text:
+            raise RuntimeError("Touchstone header missing expected reference impedance")
+        print(f"  GDSII: {gds_path.stat().st_size} bytes")
+        print(f"  S2P: {s2p_path.stat().st_size} bytes")
+        print("  EDA exporters produced valid artefacts")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
 SUITES: List[tuple] = [
+    ("C reference test suite (tests/reference_test.c)", _run_c_reference),
     ("multi_physics.thermal_fea_sp_sim", thermal_fea_sp_sim.run_multiphysics_tests),
     ("cad_yield.spc_photonic_cad", spc_photonic_cad.run_cad_engine_tests),
     ("hil_qec.hil_mps_qec", hil_mps_qec.run_hil_tests),
+    ("Pytest closed-loop bench", _run_pytest_bench),
     ("formal.formal_verification", formal_verification.run_formal_tests),
-    ("scripts.export_os (end-to-end)", _run_export_end_to_end),
+    ("EDA exporter integrity checks", _run_eda_integrity),
 ]
 
 

@@ -4,6 +4,7 @@ __pycache__/
 *.pyd
 .Python
 *.so
+tests/reference_test
 build/
 docs/paper/*.aux
 docs/paper/*.log
@@ -12,3 +13,6 @@ docs/paper/*.toc
 docs/paper/*.fls
 docs/paper/*.fdb_latexmk
 docs/paper/*.synctex.gz
+# Generated EDA artifacts
+eda/exporters/*.gds
+eda/exporters/*.s2p
