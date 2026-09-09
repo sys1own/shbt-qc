@@ -1,4 +1,5 @@
-% Self-contained master manuscript; build: latexmk -pdf -jobname=qc main.tex
+% PDF build: pdflatex -interaction=nonstopmode -halt-on-error -jobname=qc main.tex
+% Repeat until references stabilize, or use: latexmk -pdf -jobname=qc main.tex
 \documentclass[11pt,a4paper]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -50,11 +51,13 @@ quantum-error-correction models to hardware-in-the-loop control. The bare-metal
 \shbtos{} microkernel uses a 2112-byte runtime arena aligned to 64 bytes and implements
 post-quench recovery, SECDED Hamming(72,64), and AVX-512 remapping through a defined
 memory-mapped interface. SK-9 compilation and fail-closed interlocks complete the
-control architecture. The V-01--V-35 verification and validation matrix specifies
-acceptance criteria, test procedures, and mitigation paths, with software checks and
+control architecture. Requirements V-01--V-35, SECDED Hamming(72,64) ECC, and the
+SHBT-MMIO-1 register map are primary design and verification standards. The register
+bank starts at \texttt{0x70000000} and spans 56 bytes. The verification and validation
+matrix defines acceptance criteria, test procedures, and mitigation paths, with software checks and
 conditional formal verification distinguished from physical qualification. In particular,
 the encoding shall satisfy $\|W^\dagger W-P_\code\|_\op\le3.430\times10^{-3}$,
-and the maximum recovery time is $120.00\unit{ns}$
+and recovery shall satisfy $t_{\mathrm{rec}}\le120.00\unit{ns}$
 under the specified cycle and clock assumptions; device qualification requires calibrated
 measurements of the corresponding observables and end-to-end timing.
 \end{abstract}
@@ -104,26 +107,48 @@ runtime, HIL tests, and formal-verification tooling share this implementation tr
 Appendix~\ref{app:code} defines code access and build/test entry points. Software paths
 in this specification are relative to the corresponding repository root.
 
-\subsection{Verification and acceptance}
-The V-01--V-35 matrix in Section~\ref{sec:vv} defines all 35 system requirements,
-their observables, test protocols, pass/fail criteria, and mitigation paths.
+\subsection{Primary design and verification standards}
+\label{sec:standards}
+The V-01--V-35 matrix in Section~\ref{sec:vv} is the primary design and verification
+standard for all 35 system requirements, including their observables, test protocols,
+pass/fail criteria, and mitigation paths. Hardware, firmware, and digital-twin
+implementations shall satisfy each applicable requirement. The following contracts
+form part of the same normative baseline:
+\begin{itemize}[noitemsep]
+\item V-05: the encoding shall satisfy
+$\|W^\dagger W-P_\code\|_\op\le3.430\times10^{-3}$
+as defined in Equation~\ref{eq:isometry-standard}.
+\item V-27: complete post-quench recovery shall satisfy
+$t_{\mathrm{rec}}\le120.00\unit{ns}$ under the complete-stage cycle and clock
+requirements of Section~\ref{sec:telemetry}.
+\item V-34: protected 64-bit payloads shall use SECDED Hamming(72,64) ECC,
+with decode time $t_{\mathrm{ecc}}\le1.20\unit{ns}$ and correction/detection
+behavior as specified in Section~\ref{sec:ecc}.
+\item SHBT-MMIO-1: the register bank shall use base \texttt{0x70000000},
+fourteen aligned 32-bit words, and a 56-byte span through \texttt{0x70000037},
+with ABI version 1 and the access semantics in Section~\ref{sec:mmio}.
+\end{itemize}
+Appendices~\ref{app:hardware} and~\ref{app:models} supply normative implementation
+details for this baseline; their supplementary tables shall use the same limits,
+units, register offsets, and verification criteria as the main specification.
 Software verification covers functional behavior and formal contracts under explicit
 model assumptions; physical acceptance additionally requires calibrated metrology,
-uncertainty bounds, and target-hardware timing. V-05 requires
-$\|W^\dagger W-P_\code\|_\op\le3.430\times10^{-3}$, and V-27 requires
-$t_{\mathrm{rec}}\le120.00\unit{ns}$ under the specified
-cycle envelope at $f\ge2.5$ GHz. These conditional results do not constitute
-hardware qualification of the full matrix. A fallback requires retesting the affected
-requirements and coupled budgets rather than an automatic pass.
+uncertainty bounds, and target-hardware timing. Qualification shall distinguish
+software and conditional formal results from physical acceptance evidence.
+After a fallback, the affected requirements and coupled budgets shall be retested
+against the unchanged acceptance limits.
 
 \paragraph{Specification conventions.}
-``Shall'' identifies a design requirement; nominal values describe operating points,
-and a maximum or minimum defines an acceptance limit. Requirements V-01--V-35 in
+``Shall'' identifies a mandatory design or verification requirement; nominal values
+and model predictions describe operating points and shall not replace acceptance
+limits. A maximum or minimum defines an acceptance limit. Requirements V-01--V-35 in
 Section~\ref{sec:vv} apply to the processor, firmware, and digital twin. Frequencies
 are stated as $f$ or $\omega/(2\pi)$ in Hz; Hamiltonian couplings use angular-frequency
 symbols. Times use SI units, including the V-27 maximum $120.00\unit{ns}$ and V-34
 SECDED Hamming(72,64) ECC maximum $1.20\unit{ns}$. Register addresses and offsets are
-hexadecimal, and all register accesses shall follow SHBT-MMIO-1.
+hexadecimal in monospaced type; register names and software identifiers also use
+monospaced type. Bounds shall retain their stated units and numerical precision
+wherever repeated. All register accesses shall follow SHBT-MMIO-1.
 
 \section{Canonical branch, geometry, and physical degrees of freedom}
 \label{sec:geometry}
@@ -274,7 +299,7 @@ The additional phenomenological spectrum is
  &\quad+\frac{S_{\mathrm{carrier}}(T)}{1+(2\pi f\tau_{\mathrm{carrier}})^2}
  +S_{\mathrm{mag}}(f).
 \end{align}
-The quoted values are $A_q=2.1\times10^{-11}\unit{e^2/Hz}$, $\alpha_q=1.02$,
+The nominal model inputs are $A_q=2.1\times10^{-11}\unit{e^2/Hz}$, $\alpha_q=1.02$,
 $P_{\mathrm{sat}}=-82.4\unit{dBm}$, and $\tan\delta_{\mathrm{TLS}}=1.8\times10^{-6}$ in
 Al$_x$Ga$_{1-x}$As$_y$Sb$_{1-y}$ cladding. Powers must be converted from dBm to linear units
 before division; noise terms need a common referred observable and transfer functions before summation.
@@ -475,7 +500,7 @@ $G_{Ic}=3.65\pm0.12\unit{J/m^2}$, giving a central-value safety ratio 1.70.
 
 \subsection{Magnetic enclosure, interposer, and vibration}
 The four-tier enclosure is two 1.5 mm Cryoperm-10 shells
-($\mu_r=120000,145000$; quoted attenuations 42.1, 48.3 dB), a 3.0 mm five-nines aluminum
+($\mu_r=120000,145000$; nominal attenuations 42.1, 48.3 dB), a 3.0 mm five-nines aluminum
 eddy-current shell (22.4 dB at 40 GHz), and a 2.0 mm YBCO cylinder.
 Its proposed critical-state law is
 \[
@@ -484,9 +509,10 @@ Its proposed critical-state law is
 \]
 The enclosure specifies 364 waveguide penetrations, $L/D\ge5.2$, and a 145 GHz cutoff.
 Its nominal field budget reduces a $45.01\unit{\mu T}$ external field to $0.0812\unit{nT}$, versus
-V-21's $0.0975\unit{nT}$ maximum. That field ratio is about 114.9 dB, not the separately
-quoted 141.96 dB. DC field suppression and RF penetration attenuation are different tests;
-frequency-dependent shell attenuation factors cannot simply be added to prove either.
+V-21's $0.0975\unit{nT}$ maximum. That field ratio corresponds to approximately
+114.9 dB. Qualification shall measure DC field suppression and RF penetration
+attenuation separately, with frequency-dependent transfer functions for each shell
+and penetration. V-21 acceptance shall use the measured residual field in the active volume.
 
 \begin{center}\small
 \begin{tabular}{@{}lrrl@{}}\toprule
@@ -507,12 +533,13 @@ Vibration dynamics use
  \quad x_{\mathrm{rms}}^2=\int_1^{500}S_x(f)\dd f.
 \]
 The baseline vibration model uses harness stiffness $1.42\times10^3\unit{N/m}$, 35.5 dB active rejection,
-and $x_{\mathrm{rms}}=0.62\unit{nm}$, below V-28's 0.85 nm target. Its phase formula
+and $x_{\mathrm{rms}}=0.62\unit{nm}$, below V-28's 0.85 nm target. The phase transfer
 $2\pi n_{\mathrm{eff}}x_{\mathrm{rms}}/\lambda$, with $n_{\mathrm{eff}}=3.24$,
-actually gives $8.14\times10^{-3}$ rad, not the nominal $6.12\times10^{-5}$ rad;
-it is therefore not below the stated $2\pi/2^{16}=9.587\times10^{-5}$ rad DAC step.
-An alternate rejection budget uses 37.4 dB, reducing 4.04 rad to 54.3 mrad.
-Full transfer functions, force/displacement spectral units, and piezo stability margins remain required.
+gives $8.14\times10^{-3}$ rad. Qualification shall account for this phase excursion
+relative to the $2\pi/2^{16}=9.587\times10^{-5}$ rad DAC step.
+An alternative rejection model uses 37.4 dB, reducing 4.04 rad to 54.3 mrad;
+its calibration shall be specified independently. Each configuration shall provide
+full transfer functions, force/displacement spectral units, and piezo stability margins.
 
 \subsection{Cold-stage heat balance and electronics}
 \begin{center}\small
@@ -528,7 +555,7 @@ Multilayer-insulation radiation & 41.50 & 5.06\\\midrule
 Total & 819.44 & 100.00\\\bottomrule
 \end{tabular}\end{center}
 The specified 1.500 W cooling capacity gives a 680.56 mW (45.37\%) reserve for that table;
-the quoted 1.380 W runaway threshold gives a 560.56 mW margin. Adding the separately
+the nominal 1.380 W runaway threshold gives a 560.56 mW margin. Adding the separately
 specified 74.464 mW DCE pump as an additional fully absorbed load would give 893.904 mW:
 V-25 then fails its 850 mW ceiling even though the 40\% capacity-reserve criterion barely
 passes. The acceptance baseline includes the full 74.464 mW pump allocation \emph{inside}
@@ -581,7 +608,7 @@ trim DACs. These are design inputs requiring device-level calibration.
 
 \subsection{Heterodyne readout and clock specification}
 The local oscillator is $+3.50\unit{dBm}$ with RIN $-165.0\unit{dBc/Hz}$;
-the InGaAs detectors have quoted efficiency 98.51\% and dark current 12.5 pA.
+the InGaAs detectors have nominal efficiency 98.51\% and dark current 12.5 pA.
 \begin{center}\small
 \begin{tabular}{@{}lr@{}}\toprule Readout quantity & Nominal value\\\midrule
 Signal current & $12.40\unit{\mu A}$\\
@@ -594,9 +621,10 @@ Receiver SNR & $18.42\unit{dB}$\\
 Single-shot fidelity (12.0 ns) & $99.9821\%$\\\bottomrule
 \end{tabular}\end{center}
 For independent input-current noise, $\sigma_I^2=\int S_I(f)|H(f)|^2\dd f$.
-A fidelity prediction additionally requires the state-dependent current separation, priors,
-threshold, detector response, and non-Gaussian tails. The table does not alone determine the
-quoted fidelity. Similarly, DAC SFDR is not SINAD and does not establish V-30's ENOB.
+A fidelity prediction shall additionally specify the state-dependent current separation,
+priors, threshold, detector response, and non-Gaussian tails. V-31 acceptance shall
+verify the predicted fidelity through calibrated single-shot classification.
+V-30 acceptance shall derive DAC ENOB from measured SINAD; SFDR shall be characterized separately.
 The 40.000 GHz sapphire-referenced DRO phase-noise record is:
 \begin{center}\small
 \begin{tabular}{@{}lrr@{}}\toprule Offset & Nominal $L(f)$ (dBc/Hz) & Ceiling (dBc/Hz)\\\midrule
@@ -645,8 +673,8 @@ It does not establish correctability of an unspecified noise channel. The exact
 Knill--Laflamme condition $P E_i^\dagger E_jP=\lambda_{ij}P$ needs actual error operators;
 an approximate condition also needs a defined recovery map and operational error norm.
 
-\subsection{Isometry fit, acceptance limit, and remap invariance}
-The physical encoding shall satisfy the V-05 operator-norm requirement
+\subsection{V-05 isometry-defect standard and model evaluation}
+The physical encoding shall satisfy the primary V-05 design and verification standard
 \begin{equation}
  \varepsilon_W:=\left\|W^\dagger W-P_\code\right\|_\op
  \le3.430\times10^{-3}.
@@ -660,9 +688,9 @@ The channel-count fit used for design evaluation is
 \end{equation}
 Here $N_{\mathrm{ch}}$ is the channel count, distinct from the parent affine level.
 Direct evaluation gives $\varepsilon_W^{\mathrm{fit}}(312)=3.4263993\times10^{-3}$, below the
-V-05 ceiling $3.430\times10^{-3}$ by $3.6007\times10^{-6}$. This arithmetic checks
-the fit, not the physical encoding: a measured defect plus its stated uncertainty
-must meet the same ceiling.
+V-05 ceiling $3.430\times10^{-3}$ by $3.6007\times10^{-6}$. Verification shall
+record this result as a model evaluation. Physical acceptance shall require the
+measured defect plus its stated uncertainty to meet the same ceiling.
 \begin{center}\small
 \begin{tabular}{@{}rrrrrr@{}}\toprule
 $N_{\mathrm{ch}}$ & Nominal estimate & Evaluated fit & Reconstruction error & $\Delta Z/Z$ & $z_{\max}/R$\\\midrule
@@ -671,8 +699,9 @@ $N_{\mathrm{ch}}$ & Nominal estimate & Evaluated fit & Reconstruction error & $\
 104 & $2.33\,10^{-3}$ & $2.35460\,10^{-3}$ & $5.12\,10^{-4}$ & $2.95\,10^{-7}$ & 0.784\\
 312 & $3.42640\,10^{-3}$ & $3.42640\,10^{-3}$ & $1.45\,10^{-4}$ & $1.18\,10^{-7}$ & 0.985\\\bottomrule
 \end{tabular}\end{center}
-The 312-channel estimate is the evaluated fit, not a measured defect. The other columns
-are model estimates, and the modular diagnostic does not certify the V-03 observable.
+All tabulated values are model estimates; the 312-channel estimate uses the evaluated
+fit. Physical acceptance shall independently verify the V-05 defect and the V-03
+completed-partition modular residual using their specified observables and protocols.
 
 \begin{proposition}[Unitary remapping does not repair a Gram defect]
 \label{prop:gram}
@@ -977,7 +1006,8 @@ Build-time C layout assertions shall verify the payload size and alignment.
 
 \subsection{SHBT-MMIO-1 register standard}
 \label{sec:mmio}
-Firmware, HDL, and digital-twin simulation shall implement \textbf{SHBT-MMIO-1}.
+Firmware, HDL, and digital-twin simulation shall implement \textbf{SHBT-MMIO-1}
+as the primary register-interface design and verification standard.
 The register bank comprises fourteen aligned 32-bit words at base
 \texttt{0x70000000}, with word offsets \texttt{0x00--0x34} and byte extent
 \texttt{0x70000000--0x70000037} (56 bytes). Platform binding shall require ABI
@@ -985,31 +1015,32 @@ version 1 before issuing control commands.
 \begin{center}\small
 \begin{tabular}{@{}rlP{8.9cm}@{}}\toprule
 Offset & Register & Required access and behavior\\\midrule
-0x00 & status & Read-only: bit 0 OVERTEMP, bit 1 PLL\_LOCK, bit 2 ECC\_ERR, bit 3 FAULT\_ST\\
-0x04 & blank & Read/write: 1 blanks all active drive channels; 0 requests enable (only when healthy)\\
-0x08 & \texttt{fifo\_data} & Bit 0 flush request, bit 1 busy; requests self-clear in hardware\\
-0x0C & \texttt{pll\_ctrl} & Write 1 requests lock; completion is reported in status\\
-0x10 & \texttt{ecc\_low} & Read/write: low 32 bits of one latched payload word\\
-0x14 & \texttt{ecc\_high} & Read/write: high 32 bits of one latched payload word\\
-0x18 & \texttt{ecc\_check} & Read/write: bits 0--6 are Hamming parity; bit 7 is overall parity\\
-0x1C & \texttt{ecc\_commit} & Write 1 commits the corrected latched word atomically\\
-0x20 & \texttt{fault\_latch} & Write-one-to-set software fault; only a separate authorized reset clears\\
-0x24 & \texttt{channel\_select} & Read/write: channel 0--311; completed write latches its coherent ECC word\\
-0x28 & \texttt{abi\_version} & Read-only: \texttt{SHBT\_MMIO\_ABI\_VERSION == 1}; platform binding must reject any other version\\
-0x2C & \texttt{phase\_offset} & Read/write: 32-bit phase-calibration payload; scaling set by calibration record\\
-0x30 & \texttt{ecc\_counts} & Read-only: corrected count bits 0--7, uncorrectable count bits 8--15; saturating\\
-0x34 & control & Write-one requests: start bit 0, soft reset bit 1, recovery bit 2;
+\texttt{0x00} & \texttt{status} & Read-only: bit 0 OVERTEMP, bit 1 PLL\_LOCK, bit 2 ECC\_ERR, bit 3 FAULT\_ST\\
+\texttt{0x04} & \texttt{blank} & Read/write: 1 blanks all active drive channels; 0 requests enable (only when healthy)\\
+\texttt{0x08} & \texttt{fifo\_data} & Bit 0 flush request, bit 1 busy; requests self-clear in hardware\\
+\texttt{0x0C} & \texttt{pll\_ctrl} & Write 1 requests lock; \texttt{status} bit 1 indicates completion\\
+\texttt{0x10} & \texttt{ecc\_low} & Read/write: low 32 bits of one latched payload word\\
+\texttt{0x14} & \texttt{ecc\_high} & Read/write: high 32 bits of one latched payload word\\
+\texttt{0x18} & \texttt{ecc\_check} & Read/write: bits 0--6 are Hamming parity; bit 7 is overall even parity\\
+\texttt{0x1C} & \texttt{ecc\_commit} & Write 1 commits the corrected payload and check byte atomically\\
+\texttt{0x20} & \texttt{fault\_latch} & Write-one-to-set software fault; only a separate authorized reset clears\\
+\texttt{0x24} & \texttt{channel\_select} & Read/write: channel 0--311; completed write latches its coherent ECC word\\
+\texttt{0x28} & \texttt{abi\_version} & Read-only: \texttt{SHBT\_MMIO\_ABI\_VERSION == 1}; platform binding shall reject any other version\\
+\texttt{0x2C} & \texttt{phase\_offset} & Read/write: 32-bit phase-calibration payload; scaling set by calibration record\\
+\texttt{0x30} & \texttt{ecc\_counts} & Read-only: corrected count bits 0--7, uncorrectable count bits 8--15; saturating\\
+\texttt{0x34} & \texttt{control} & Write-one requests: start bit 0, soft reset bit 1, recovery bit 2;
 pump-attenuation payload bits 8--15; reserved bits zero\\\bottomrule
 \end{tabular}\end{center}
-Writes are strongly ordered device accesses with a completion read. Hardware must provide
+Writes shall be strongly ordered device accesses with a completion read. Hardware shall provide
 a coherent ECC snapshot until commit, uncached MMIO mappings, autonomous overtemperature
-blanking, and a healthy-status gate on every enable request. The C \texttt{volatile}
-qualifier alone does not establish these bus guarantees. The complete listing has a finite
-poll count, no heap allocation, no ARM-only barriers in x86 code, and an explicit failure
-return for uncorrectable ECC or persistent faults. It is a portable functional reference,
-not a nanosecond WCET certificate. Every command register must support a side-effect-free
-completion read; readback must not reissue its command. Reset requests cannot clear an
-unsafe interlock or the independently authorized fault latch.
+blanking, and a healthy-status gate on every enable request. Platform binding shall
+establish these bus guarantees independently of the C \texttt{volatile} qualifier.
+The reference implementation specifies bounded polling, zero-heap operation,
+architecture-appropriate ordering, and explicit failure returns for uncorrectable
+ECC or persistent faults. Target qualification shall verify worst-case execution time
+separately from functional correctness. Every command register shall support a
+side-effect-free completion read; readback shall not reissue its command. Reset requests
+shall preserve unsafe interlocks and the independently authorized fault latch.
 
 \paragraph{Status and command semantics.}
 \texttt{OVERTEMP} is active-high unsafe; \texttt{PLL\_LOCK} is active-high locked at
@@ -1021,7 +1052,8 @@ Additional telemetry shall use a versioned extension rather than aliasing these 
 
 \subsection{SECDED Hamming(72,64) ECC standard}
 \label{sec:ecc}
-Each protected 64-bit payload shall use SECDED Hamming(72,64) ECC.
+SECDED Hamming(72,64) ECC is the primary payload-protection design and verification
+standard. Each protected 64-bit payload shall use this code.
 Positions 1--71 contain seven Hamming parity positions $1,2,4,8,16,32,64$ and 64 data
 positions. Check-byte bits 0--6 store those seven parity bits; bit 7 is an overall even-parity
 bit over the other 71 bits. Let $s$ be the XOR of occupied Hamming positions and $p$ the
@@ -1351,7 +1383,8 @@ No allocator avoids one source of variability but cannot prove V-33's 5 ps dispa
 \section{Recovery timing, telemetry, and independent safety interlocks}
 \label{sec:telemetry}
 \subsection{V-27 maximum recovery-time standard}
-For a recoverable quench, the complete event-to-healthy-output latency shall satisfy
+V-27 defines the primary recovery-time design and verification standard. For a
+recoverable quench, the complete event-to-healthy-output latency shall satisfy
 \begin{equation}
  t_{\mathrm{rec}}\le120.00\unit{ns}.
  \label{eq:recovery-standard}
@@ -1434,12 +1467,14 @@ A computed value must satisfy $\widehat\delta_\Phi+u_{\delta}<10^{-12}$ to certi
 an ambiguous interval should fail safe, not be silently rounded to zero.
 This does not guarantee that physical measurement noise is that small.
 
-The ten-load/two-stream AVX-512 reduction would take more than 3.42 cycles merely for ten
-FMAs at two FMAs/cycle, before loads, dependencies, and horizontal reduction. The quoted
-1.14 ns at 3 GHz is therefore not established for the described serial CPU loop. A dedicated
-parallel hardware monitor might target that latency, but needs its own RTL, precision,
-sample-rate, transport, and end-to-end timing analysis. A per-word ECC latency does not
-establish the latency of this different operation.
+The ten-load/two-stream AVX-512 reduction requires at least five issue cycles for ten
+FMAs at two FMAs/cycle, before loads, dependencies, and horizontal reduction.
+Qualification shall include these costs in the monitor timing budget. The
+$1.14\unit{ns}$ interval corresponds to 3.42 cycles at $3\unit{GHz}$ and shall
+remain a design target pending an implementation with demonstrated timing.
+A dedicated parallel monitor shall provide its RTL, precision, sample-rate,
+transport, and end-to-end timing analysis. Monitor latency and per-word ECC
+latency shall be verified independently.
 
 \subsection{The 2.50 ns emergency electro-optic shunt}
 The nominal component budget is
@@ -1469,12 +1504,12 @@ latency must be added where sequential; the 2.50 ns actuation target is not an u
 quench-to-safe bound.
 \section{Complete verification and validation matrix}
 \label{sec:vv}
-The following six-column matrix is the primary design standard for all 35
+The following six-column matrix is the primary design and verification standard for all 35
 requirements V-01--V-35. Each implementation shall meet its applicable acceptance
-criteria and verification protocol. V-09 specifies an EOM modulation frequency,
-not a dimensionless modulation index. V-06--V-08 distinguish angular and ordinary frequencies.
-No fallback counts as an automatic pass; after intervention the affected requirements and
-their coupled thermal, timing, and fidelity budgets must be retested. All rows currently
+criteria and verification protocol. V-09 shall be evaluated as an EOM modulation
+frequency; V-06--V-08 shall use the stated angular-to-ordinary-frequency conversions.
+After mitigation, the affected requirements and their coupled thermal, timing, and
+fidelity budgets shall be retested against the same limits. All rows currently
 have hardware status \textbf{qualification pending}; software checks and conditional
 formal results are summarized separately below.
 \begin{landscape}
@@ -1534,16 +1569,19 @@ The implementation provides the following requirement-specific verification inte
 The master runner \file{tests/run_all_tests.py} sequences the C reference test, multi-physics FEA, photonic CAD, HIL/MPS-QEC, pytest, Z3 formal verification, and EDA integrity checks, returning exit code~0 when all suites pass.
 
 \subsection{Evidence-to-requirement discharge rules}
-For V-01--V-05, a cavity spectrum is not a central-charge, modular-anomaly, or encoding
-tomography measurement; provide a defined estimator with statistical and systematic errors.
-For V-06--V-11, the calibrated Hamiltonian and pulse-transfer model must match the physical
-branch. For V-12--V-15, decoder correctness, logical error, memory throughput, and latency
-are separately measured quantities. For V-16--V-20 and V-23--V-29, reconcile the arithmetic
-and coupled physical budgets before interpreting simulator predictions as passes.
-V-21, V-22, V-30, and V-32 require dedicated shielding, converter-linearity, and clock-noise
-characterization beyond the integrated model. V-31 requires a readout model, V-33/V-34
-require actual target timing, and V-35 requires complete-module statistics. A requirement
-passes only when its defined protocol and acceptance criterion are satisfied.
+For V-01--V-05, acceptance shall use requirement-specific estimators of the boundary
+algebra, modular residual, noise correlation, and encoding defect, with statistical
+and systematic uncertainties. For V-06--V-11, the calibrated Hamiltonian and
+pulse-transfer model shall match the physical configuration. For V-12--V-15, decoder
+correctness, logical error, memory throughput, and latency shall be measured separately.
+For V-16--V-20 and V-23--V-29, verification shall include consistent arithmetic,
+coupled physical budgets, and calibrated measurements. V-21, V-22, V-30, and V-32
+shall include dedicated shielding, converter-linearity, and clock-noise characterization.
+V-31 shall include readout-model validation and measured classification fidelity;
+V-33/V-34 shall include target-hardware timing; V-35 shall include complete-module
+statistics. A requirement shall pass only when its defined protocol and acceptance
+criterion are satisfied; model predictions shall be recorded separately from
+physical qualification evidence.
 
 \section{Reliability, cold boot, and bill of materials}
 \subsection{FMEDA model and reliability allocation}
@@ -1556,12 +1594,13 @@ MPS decoder & 88.4 & 87.2 & 1.2 & 98.64\\
 DRO/PLL clock & 24.1 & 23.8 & 0.3 & 98.76\\
 Pulse-tube cooler & 120.0 & 116.5 & 3.5 & 97.08\\
 Shielding & 22.3 & 22.1 & 0.2 & 99.10\\\midrule
-Nominal rollup & 412.5 & 404.5 & 8.0 & 98.41\\\bottomrule
+Aggregate model & 412.5 & 404.5 & 8.0 & 98.06\\\bottomrule
 \end{tabular}\end{center}
 One FIT means $10^{-9}\unit{h^{-1}}$. The base-rate sum is 412.5 FIT, corresponding to
 $10^9/412.5=2.42424\times10^6$ h under a constant-rate model. The row sums of the next
-two columns are 404.5 and 8.0, giving a detected fraction $404.5/412.5=98.06\%$,
-not the nominal 98.41\% rollup.
+two columns are 404.5 and 8.0, giving an aggregate detected fraction
+$404.5/412.5\simeq98.06\%$. Qualification shall evaluate this model result
+separately from the overall diagnostic-coverage objective.
 Additional design objectives are SFF 96.81\%, overall diagnostic coverage 98.41\%,
 SIL-3 qualification, and a cosmic-neutron upset rate $9.1\times10^{-9}\unit{h^{-1}}$ per system.
 An aggregate detection ratio or an MTBF does not establish a safety-integrity qualification.
@@ -1579,10 +1618,11 @@ objectives alone do not establish compliance.
 5 & Microcavity tuning and four-bit DAC offset nulling & 45 s\\
 6 & Boundary-isometry characterization and QEC activation & 15 s\\\bottomrule
 \end{tabular}\end{center}
-Every phase needs an exit predicate, timeout, logged calibration identifier, and safe rollback;
-the nominal duration is not the predicate. Optical enabling occurs only after vacuum,
-temperature, lock, ECC, channel yield, and control self-tests pass. A final display
-of ``312 channels locked, 819.44 mW'' is a proposed state, not evidence that this boot ran.
+Every phase shall define an exit predicate, timeout, calibration identifier, and safe
+rollback. Phase completion shall depend on the exit predicate rather than elapsed
+nominal duration. Optical enabling shall require passing vacuum, temperature, lock,
+ECC, channel-yield, and control self-tests. The boot record shall contain measured
+channel-lock status, cold-stage power, timestamps, and the result of each exit predicate.
 
 \subsection{Bill of materials}
 \begingroup\small\setlength{\tabcolsep}{3pt}
@@ -1613,7 +1653,7 @@ The SHBT-R specification integrates the canonical $(26,8,312)$ boundary algebra,
 twin, and \shbtos{} runtime into one architecture. Its equations, reference implementations,
 interface contracts, and V-01--V-35 matrix define the implementation and acceptance baseline.
 The central outstanding gates are a physical encoding of the affine sectors and seed-to-optical conversion
-chain; a consistent isometry calibration and recovery channel; a reconciled entropy/power
+chain; a consistent isometry calibration and recovery channel; a validated entropy/power
 budget; a specified braid representation and high-precision compiler certificate; and a
 versioned hardware interface with measured end-to-end timing. Release requires completion
 of these gates and requirement-level verification; software and model-level results do
@@ -1695,7 +1735,16 @@ the applicable V-01--V-35 requirements and their assumptions; functional tests a
 formal bounds do not establish physical-device timing or fabrication qualification.
 
 \subsection{Self-contained manuscript build}
-Build this specification from the directory containing \file{main.tex}:
+Build \file{qc.pdf} from the directory containing \file{main.tex}:
+\begin{lstlisting}[language=bash]
+pdflatex -interaction=nonstopmode -halt-on-error -jobname=qc main.tex
+pdflatex -interaction=nonstopmode -halt-on-error -jobname=qc main.tex
+\end{lstlisting}
+Repeat the command if the log requests another pass, until citations,
+cross-references, the table of contents, and table widths are stable.
+The \texttt{-jobname=qc} option sets the output basename; a trailing
+\texttt{-o qc.pdf} argument does not select the PDF filename.
+Alternatively, automate the required passes with:
 \begin{lstlisting}[language=bash]
 latexmk -pdf -jobname=qc main.tex
 \end{lstlisting}
@@ -1705,9 +1754,12 @@ or shell-escape step.
 \clearpage
 \section{Supplementary Microcavity and Cluster Specifications}
 \label{app:hardware}
-This appendix specifies the microcavity array, cluster organization, and physical
-interfaces of SHBT-R. The channel definitions and acceptance limits apply to device
-fabrication, calibration, reconstruction, and digital-twin configuration.
+This appendix defines normative supplementary specifications for the microcavity
+array, cluster organization, and physical interfaces of SHBT-R. Device fabrication,
+calibration, reconstruction, and digital-twin configuration shall use these channel
+definitions and the primary design and verification standards in
+Section~\ref{sec:standards}. Table~\ref{tab:vv} defines the governing acceptance
+limits; nominal parameters in this appendix shall be evaluated against those limits.
 
 \subsection{Channel inventory and cluster addressing}
 The processor shall operate 312 active InP/InGaAsP microcavity channels in 52
@@ -1769,11 +1821,12 @@ specified independently. The encoding map shall satisfy
  W=WP_\code,\qquad
  \left\|W^\dagger W-P_\code\right\|_\op\le3.430\times10^{-3}.
 \]
-V-05 acceptance shall include the uncertainty of the reconstructed operator-norm
-defect. The channel-count fit in Equation~\ref{eq:fit} evaluates to
-$3.4263993\times10^{-3}$ at 312 channels and is a model prediction rather than
-tomographic acceptance. Unitary remapping preserves the Gram-defect norm;
-recalibration and recovery projections shall be assessed using the same V-05 limit.
+V-05 acceptance shall require the reconstructed operator-norm defect plus its stated
+uncertainty to satisfy Equation~\ref{eq:isometry-standard}. The channel-count fit in
+Equation~\ref{eq:fit} evaluates to $3.4263993\times10^{-3}$ at 312 channels and shall
+be recorded as a model prediction separately from tomographic acceptance evidence.
+Unitary remapping preserves the Gram-defect norm; recalibration and recovery
+projections shall be assessed using the same V-05 limit.
 
 \subsection{Squeezed-state seeding and physical interfaces}
 The seeding stage shall couple a $72\unit{GHz}$ parametric drive to two
@@ -1806,9 +1859,11 @@ Table~\ref{tab:vv}.
 \clearpage
 \section{Supplementary Digital-Twin Architecture and Register Maps}
 \label{app:models}
-This appendix specifies the digital-twin modules, data exchange, SHBT-MMIO-1
-register bank, and recovery/ECC integration. The implementation repositories and
-build entry points are given in Appendix~\ref{app:code}.
+This appendix defines normative supplementary specifications for the digital-twin
+modules, data exchange, SHBT-MMIO-1 register bank, and recovery/ECC integration.
+All modules shall implement the primary design and verification standards in
+Section~\ref{sec:standards}. The implementation repositories and build entry points
+are given in Appendix~\ref{app:code}.
 
 \subsection{Module organization and data exchange}
 \begin{longtable}{@{}P{3.0cm}P{6.7cm}P{5.2cm}@{}}
@@ -1859,15 +1914,17 @@ and truncation error. Stabilizer measurements shall use contracted expectation
 values or the specified measurement sampling model. Pauli injection, syndrome
 extraction, recovery selection, and logical-error estimation shall be tested
 against exact small-system calculations. Quantum stabilizer syndromes and
-classical SECDED Hamming(72,64) syndromes are distinct data types and shall not be
-interchanged. The MPS frame-time maximum is $150.0\unit{\mu s}$ under V-14;
-the ECC decode maximum is $1.20\unit{ns}$ under V-34.
+classical SECDED Hamming(72,64) ECC syndromes shall use separate data types and
+interfaces. The MPS frame time shall satisfy $t_{\mathrm{dec}}\le150.0\unit{\mu s}$
+under V-14; ECC decoding shall satisfy $t_{\mathrm{ecc}}\le1.20\unit{ns}$ under V-34.
 
 \subsection{SHBT-MMIO-1 address map}
-The base address is \texttt{0x70000000}. All words are 32 bits, aligned on
-four-byte boundaries, and accessed as uncached device memory. The 56-byte bank
-occupies \texttt{0x70000000--0x70000037}. The following offsets and access modes
-shall match the register standard in Section~\ref{sec:mmio}.
+SHBT-MMIO-1 shall use base address \texttt{0x70000000}. The bank shall contain
+fourteen 32-bit words aligned on four-byte boundaries and accessed as uncached
+device memory. Its 56-byte span shall occupy \texttt{0x70000000--0x70000037},
+with register-start offsets \texttt{0x00--0x34}. Table~\ref{tab:twin-mmio}
+specifies the same normative offsets and access modes as Section~\ref{sec:mmio};
+hardware, firmware, and the virtual bus shall implement this single register contract.
 
 \begin{longtable}{@{}P{1.4cm}P{3.0cm}P{2.0cm}P{8.5cm}@{}}
 \caption{SHBT-MMIO-1 register offsets and semantics.}\label{tab:twin-mmio}\\
@@ -1877,14 +1934,14 @@ shall match the register standard in Section~\ref{sec:mmio}.
 \texttt{0x00} & \texttt{status} & Read-only & Bit 0 OVERTEMP; bit 1 PLL\_LOCK; bit 2 ECC\_ERR; bit 3 FAULT\_ST. OVERTEMP is active-high unsafe.\\
 \texttt{0x04} & \texttt{blank} & Read/write & Value 1 blanks all active drives; value 0 requests enable subject to healthy physical inputs and interlocks.\\
 \texttt{0x08} & \texttt{fifo\_data} & Request / status & Bit 0 requests flush and self-clears; bit 1 indicates busy.\\
-\texttt{0x0C} & \texttt{pll\_ctrl} & Request & Write 1 requests phase lock; status bit 1 indicates completion.\\
+\texttt{0x0C} & \texttt{pll\_ctrl} & Request & Write 1 requests phase lock; \texttt{status} bit 1 indicates completion.\\
 \texttt{0x10} & \texttt{ecc\_low} & Read/write & Low 32 bits of the selected coherent ECC payload.\\
 \texttt{0x14} & \texttt{ecc\_high} & Read/write & High 32 bits of the same payload.\\
 \texttt{0x18} & \texttt{ecc\_check} & Read/write & Bits 0--6 store Hamming parity; bit 7 stores overall even parity.\\
 \texttt{0x1C} & \texttt{ecc\_commit} & Request & Write 1 atomically commits the corrected payload and check byte.\\
 \texttt{0x20} & \texttt{fault\_latch} & Write-one-to-set & A software fault sets the latch; only the independently authorized reset clears it.\\
 \texttt{0x24} & \texttt{channel\_select} & Read/write & Logical channel 0--311; completed selection latches a coherent ECC snapshot.\\
-\texttt{0x28} & \texttt{abi\_version} & Read-only & Value 1 is required for platform binding.\\
+\texttt{0x28} & \texttt{abi\_version} & Read-only & Platform binding shall require value 1 and reject other versions before issuing control commands.\\
 \texttt{0x2C} & \texttt{phase\_offset} & Read/write & 32-bit phase-calibration payload with scaling defined by the calibration record.\\
 \texttt{0x30} & \texttt{ecc\_counts} & Read-only & Bits 0--7 count corrected errors; bits 8--15 count uncorrectable errors. Both counters saturate.\\
 \texttt{0x34} & \texttt{control} & Request / payload & Start bit 0; soft reset bit 1; recovery bit 2; pump attenuation bits 8--15; reserved bits zero.\\
@@ -1910,11 +1967,13 @@ reacquisition before enabling healthy outputs. The end-to-end requirement is
  (c_1,c_2,c_3,c_4)\le(40,65,115,80),\qquad
  f_{\mathrm{CPU}}\ge2.5\unit{GHz},
 \]
-where the cycle limits apply componentwise to complete stages. The allocation
+where the cycle limits apply componentwise to complete stages. V-27 verification
+shall measure the complete event-to-healthy-output latency. The allocation
 includes interrupt overhead, bus completion, polling, ECC, and physical response.
 The cycle-composition proof and its implementation assumptions are given in
 Section~\ref{sec:telemetry}. A persistent fault or timeout shall leave drives
-blanked and the fault latched; that safe outcome is not a successful recovery test.
+blanked and the fault latched. Verification shall record this as a fail-closed
+outcome separately from a successful V-27 recovery.
 
 \subsection{Runtime memory and verification outputs}
 The \shbtos{} arena shall occupy 2112 payload bytes aligned to 64 bytes: 640 bytes
