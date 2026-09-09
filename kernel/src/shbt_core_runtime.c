@@ -178,6 +178,8 @@ int32_t shbt_recover(void)
             return -2;
     }
 
+    /* Clear fault status bits before de-asserting RF blanking. */
+    hw->status &= ~(SHBT_STATUS_OVERTEMP | SHBT_STATUS_ECC_ERR | SHBT_STATUS_FAULT_ST);
     hw->blank = 0U;
     hw->fault_latch = 0U;
 

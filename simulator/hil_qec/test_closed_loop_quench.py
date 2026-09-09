@@ -36,6 +36,8 @@ def test_quench_recovery_time():
     assert loop.bus.regs.blank == 0, "RF blanking must be de-asserted after recovery"
     assert loop.bus.regs.fault_latch == 0, "fault latch must be cleared after recovery"
     assert loop.bus.regs.pll_ctrl == 1, "PLL lock request must remain asserted"
+    assert not (loop.bus.regs.status & (SHBT_STATUS_OVERTEMP | SHBT_STATUS_FAULT_ST)), \
+        "overtemperature and fault status bits must be cleared"
 
 
 def test_double_bit_ecc_blanking():
