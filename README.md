@@ -1,8 +1,10 @@
 # SHBT-R Quantum Computer: Digital-Twin Simulation Engine and Bare-Metal Microkernel
 
-This repository contains the engineering physics digital-twin simulation engine, bare-metal microkernel runtime (`shbt-os`), formal verification suite, and hardware synthesis toolchain for the Static Holographic Boundary Theory (SHBT-R) quantum computer architecture.
+This repository (`shbt-qc`) contains the engineering physics digital-twin simulation engine, freestanding bare-metal microkernel runtime (`shbt-os`), formal verification suite, EDA exporter toolchain, and CLI orchestrator for the Static Holographic Boundary Theory (SHBT-R) quantum computer architecture.
 
 The platform delivers multi-physics co-simulation across thermal, optoelectronic, and topological QEC domains while embedding the C-runtime microkernel for deterministic hardware-in-the-loop (HIL) execution.
+
+For the companion boundary CFT and precision cosmology theory simulator, see [shbt-precision](https://github.com/sys1own/shbt-precision.git).
 
 ---
 
@@ -10,127 +12,146 @@ The platform delivers multi-physics co-simulation across thermal, optoelectronic
 
 The SHBT-R architecture models a 312-channel synthetic frequency photonic quantum processor organized into 52 hexameric clusters. The physical and mathematical parameters governing the substrate include:
 
-- **Algebraic Gauge Sector**: Formulated under the Wess-Zumino-Witten (WZW) affine levels $(k_l, k_q, K) = (26, 8, 312)$ corresponding to $SU(2)_{26}$, $SU(3)_8$, and $SO(10)_{312}$.
-- **Photonic Core Substrate**: 312 active InP/InGaAsP microcavity channels driven by a 72 GHz dynamical Casimir effect (DCE) pump and seeded with 36 GHz two-mode squeezed vacuum states.
-- **Cryogenic and Acoustic Interface**: $T_{\text{ambient}} = 4.2\text{ K}$ liquid Helium-4 bath interfacing a single-crystal sapphire substrate ($V_{\text{substrate}} \ge 1911\text{ cm}^3$, $Z_{\text{sapphire}} = 44.178\text{ MRayl}$) through a nanoporous silica aerogel quarter-wave matching layer ($d_m = 6.395\text{ nm}$, $Z_m = 1.1512\text{ MRayl}$).
-- **Superconducting Readout Bus**: 32-channel Nb/NbN coplanar waveguide loops operating with characteristic impedance $Z_0 = 50.0\ \Omega$ below critical temperature $T_c = 16.2\text{ K}$.
-- **Zero-Heap Memory Arena**: 2112-byte contiguous `UnifiedStinespringFrame` pre-allocated in SRAM, partitioned into an active visible register capacity ($\eta_A = 10/33$, 640 bytes) and a dark ledger capacity ($\eta_D = 23/33$, 1472 bytes).
+- **Algebraic Gauge Sector**: Formulated under Wess-Zumino-Witten (WZW) affine levels $(k_l, k_q, K) = (26, 8, 312)$ corresponding to $SU(2)_{26}$, $SU(3)_8$, and $SO(10)_{312}$ with central charges $c_{\text{vis}} = 1325/154$, $c_{\text{parent}} = 351/8$, and $c_{\text{dark}}^{\text{comp}} = 1197103/362670$.
+- **Photonic Core Substrate**: 312 active InP/InGaAsP microcavity channels (plus 24 redundant spares, 336 total fabricated) driven by a 72 GHz dynamical Casimir effect (DCE) pump and seeded with 36 GHz two-mode squeezed vacuum states ($r=1.52$).
+- **Boundary Isometry Limit**: Formally bounded code projection operator norm defect $\Vert{}W^\dagger W - P_{\text{code}}\Vert{}_{\text{op}} \le 3.430 \times 10^{-3}$.
+- **Cryogenic and Acoustic Interface**: $T_{\text{ambient}} = 4.2\text{ K}$ liquid Helium-4 bath interfacing a single-crystal sapphire substrate ($V_{\text{substrate}} \ge 1911\text{ cm}^3$, $Z_{\text{sapphire}} = 44.178\text{ MRayl}$) through a nanoporous silica aerogel quarter-wave matching layer ($d_m = 6.395\text{ nm}$, $Z_m = 1.1512\text{ MRayl}$) with Kapitza thermal boundary resistance coefficient $\alpha_K = 142.0\text{ W}/(\text{m}^2\text{K}^4)$.
+- **Zero-Heap Memory Arena**: 2112-byte contiguous `UnifiedStinespringFrame` pre-allocated in SRAM, partitioned into an active visible register capacity ($\eta_A = 10/33$, 640 bytes) and a dark ledger capacity ($\eta_D = 23/33$, 1472 bytes containing 124 8-byte `ShbtBraidDescriptor` structs).
+- **Hardware Register Contract**: Normative `SHBT-MMIO-1` interface at base address `0x70000000` spanning 56 bytes (`0x00`-`0x34`).
 
 ---
 
 ## 2. Repository Layout
 
-The repository is structured to maintain modular separation across multi-physics simulation, CAD tolerance engines, bare-metal runtime compilation, formal verification, and automated integration testing:
+The repository is structured to maintain modular separation across multi-physics simulation, CAD tolerance engines, EDA exporters, bare-metal runtime compilation, formal verification, and automated integration testing:
 
 ```text
 shbt-qc/
-├── simulator/
-│   ├── multi_physics/      # 3D thermal FEA, Kapitza resistance, and vibration jitter models
-│   │   └── thermal_fea_sp_sim.py
-│   ├── cad_yield/          # Monte Carlo SPC yield engine & microcavity coupling generator
-│   │   └── spc_photonic_cad.py
-│   └── hil_qec/            # MMIO bus emulator & Matrix Product State (MPS) QEC decoder
-│       └── hil_mps_qec.py
+├── cli/
+│   └── main.py                     # Unifying shbt-tool CLI orchestrator
+├── eda/
+│   └── exporters/
+│       ├── pdk_hexamer_exporter.py # Photonic gdsfactory GDSII mask layout generator
+│       └── export_interposer_rf.py # 12-layer Rogers RO4350B interposer Touchstone S2P generator
+├── formal/
+│   └── formal_verification.py     # Z3 theorem prover logic bounds and safety invariant proofs
 ├── kernel/
-│   ├── include/            # Hardware abstraction C headers and register definitions
-│   │   ├── shbt_hardware.h
-│   │   └── shbt_hal.h
-│   └── src/                # Cryogenic SRAM bare-metal C microkernel sources
-│       └── shbt_core_runtime.c
-├── formal/                 # Z3 theorem prover logic bounds and TLA+ specifications
-│   └── formal_verification.py
-├── scripts/                # Toolchain drivers, packaging, and OS exporter
-│   └── export_os.py
-└── tests/                  # Integrated test runner for end-to-end verification
-    └── run_all_tests.py
+│   ├── include/
+│   │   └── shbt_hardware.h        # Normative SHBT-MMIO-1 struct and _Static_assert offsets
+│   ├── src/
+│   │   ├── shbt_core_runtime.c    # Freestanding C11 microkernel (SECDED ECC, recovery, AVX-512 remap)
+│   │   └── shbt_user_mmio.c       # User-space MMIO relocation shim
+│   └── linker.ld                  # GNU linker script for freestanding targets (.stinespring_frame)
+├── simulator/
+│   ├── multi_physics/              # 3D thermal FEA, Kapitza resistance, and vibration models
+│   │   └── thermal_fea_sp_sim.py
+│   ├── cad_yield/                  # Monte Carlo SPC yield engine & DCE squeezing conversion
+│   │   └── spc_photonic_cad.py
+│   └── hil_qec/                    # HIL MMIO emulator, MPS QEC decoder, and ctypes bridge
+│       ├── hil_mps_qec.py
+│       ├── kernel_bridge.py
+│       └── test_closed_loop_quench.py
+├── tests/
+│   ├── reference_test.c           # C reference test suite
+│   └── run_all_tests.py           # Master end-to-end integration test runner
+└── docs/
+    └── paper/
+        ├── main.tex               # Self-contained master paper TeX
+        └── qc.pdf                 # Compiled manuscript specification
+
 ```
 
 ---
 
-## 3. Multiphysics Co-Simulation Engine
+## 3. Multiphysics Engine & EDA Toolchain
 
-The simulation engine models three core physical domains operating in parallel:
+1. **3D Cryogenic Thermal Diffusion (`simulator/multi_physics/`)**: Solves non-linear heat transport at $4.2\text{ K}$ with temperature-dependent specific heat $C_v(T) = \gamma_1 T + \beta_3 T^3$ and Kapitza interface flux $q_K = \alpha_K T^3 (T_{\text{SOI}} - T_{\text{InP}})$.
 
-### 3.1 3D Cryogenic Thermal Diffusion (`simulator/multi_physics/`)
-Thermal diffusion across the 28nm FD-SOI and InP substrate grid ($20 \times 20 \times 10$, $\Delta x = 1\,\mu\text{m}$, $\Delta t = 10\text{ ps}$) at $4.2\text{ K}$ accounts for low-temperature boundary scattering and Kapitza interface resistance $R_K$:
 
-$$\rho C_p(T) \frac{\partial T}{\partial t} = \nabla \cdot \left( k(T) \nabla T \right) + Q_{\text{quench}}(r, t)$$
+2. **Photonic CAD & Squeezing Engine (`simulator/cad_yield/`)**: Evaluates SPC tolerance over 52 hexamers (CD $250.12 \pm 0.42\text{ nm}$, sidewall $89.88 \pm 0.04^\circ$) and models the $36\text{ GHz}$ to $193.41\text{ THz}$ electro-optic conversion matrix.
 
-Material properties obey cubic low-temperature transport laws:
-- $c_{p,\text{InP}} = 2.1 \times 10^{-3} T^3 + 10^{-6}\text{ J/(kg K)}$
-- $\kappa_{\text{InP}} = 8.5 \times 10^{-4} T^3 + 10^{-5}\text{ W/(m K)}$
 
-### 3.2 Photonic CAD & SPC Yield Engine (`simulator/cad_yield/`)
-Evaluates statistical process control (SPC) variation across 312 nanophotonic microcavities governed by inter-cavity evanescent coupling $J_{mn}$ and Kerr non-linearity $\chi^{(3)}$:
+3. **Photonic GDSII Exporter (`eda/exporters/pdk_hexamer_exporter.py`)**: Uses `gdsfactory` to output wafer-ready GDSII layouts for $C_6$-symmetric ring hexamers, directional couplers, and thermo-optic phase shifters.
 
-$$\frac{d A_m}{d t} = \left( i \Delta \omega_m - \frac{\gamma_m}{2} \right) A_m + i \sum_{n} J_{mn} A_n + i \gamma_{\text{Kerr}} |A_m|^2 A_m + \sqrt{\gamma_{\text{in}}} A_{\text{pump}}$$
 
-### 3.3 Hardware-in-the-Loop QEC Decoder (`simulator/hil_qec/`)
-Intercepts MMIO register operations at base address `0x70000000` to mirror real-time thermal transients and optical phase drifts into an inline Matrix Product State (MPS) tensor network decoder operating at bond dimension $\chi = 256$.
+4. **Interposer RF Exporter (`eda/exporters/export_interposer_rf.py`)**: Exports 2-port Touchstone S-parameter files ($S_{11}, S_{21}$) up to 40 GHz for the 12-layer Rogers RO4350B interposer ($Z_0 = 50.12 \pm 0.80\ \Omega$, FEXT $\le -70.0\text{ dB}$).
+
+
 
 ---
 
 ## 4. Bare-Metal Microkernel (`shbt-os`) Execution Model
 
-The `shbt-os` runtime manages hardware state transitions without POSIX kernel overhead, heap allocations, or virtual memory translation delays.
+The `shbt-os` microkernel (`kernel/src/shbt_core_runtime.c`) executes in freestanding C11 with zero heap allocations, zero libc dependencies, and strong ordering over MMIO registers:
 
-- **Memory Layout**: Executed entirely inside the 64-byte aligned 2112-byte `UnifiedStinespringFrame` static SRAM arena.
-- **GoI Wavefront Scheduler**: Evaluates continuous graph token reductions in $O(1)$ time via matrix wavefront inversion:
-  $$\text{EX}(M, U) = (I - U \cdot M)^{-1} \cdot U$$
-- **Trace-Free Constraint**: Enforces $\text{Tr}(\hat{O}_{\text{excitation}}) = 0$ across active transformations, eliminating local electric Weyl curvature ($E_{\mu\nu} = 0$) and zeroing framing defects ($\Delta_{\text{fr}} = 0$).
-- **ECC Memory Scrubbing**: SECDED Hamming(72,64) hardware scrubbing engine running across memory frames to guarantee effective soft error rate $\text{SER}_{\text{effective}} \le 7.12 \times 10^{-42}\text{ errors/bit-hr}$.
+* **SECDED Hamming(72,64) ECC**: Computes check bits across 64-bit payloads with single-bit correction and double-bit error detection.
+
+
+* **Deterministic Quench Recovery (`shbt_recover`)**: Executes the 4-step post-quench recovery sequence (inspect fault $\rightarrow$ assert RF blanking $\rightarrow$ flush/correct ECC $\rightarrow$ request PLL lock) in $\le 120.00\text{ ns}$ execution budget.
+
+
+* **AVX-512 Givens Remapping (`shbt_remap`)**: Vectorized $O(1)$ column rotation remapping for dynamic channel replacement.
+
+
+* **Linker Memory Arena (`kernel/linker.ld`)**: Allocates the 2112-byte `.stinespring_frame` arena on a strict 64-byte boundary with `NOLOAD` semantics.
+
+
 
 ---
 
-## 5. SIMD Telemetry & Emergency Safety Interlock
+## 5. System CLI Orchestrator (`shbt-tool`)
 
-A deterministic 4-instruction AVX-512 SIMD telemetry loop audits sensor registers in 1.14 ns cycles to enforce eigenvector rigidity detuning floor $\delta_\Phi < 10^{-12}$:
+The unifying CLI interface in `cli/main.py` provides command-line control over all project subsystems:
 
-```assembly
-vmovaps  zmm0, [rdi]        ; Load 16 sensor lanes (64-byte aligned)
-vcmpps   k1, zmm0, zmm1, 23 ; Compare sensor readings against threshold
-vmovmskps eax, k1           ; Extract comparison mask
-test     eax, eax           ; Test for threshold breach
-jnz      .TRIGGER_SHUNT     ; Detuning breach: trigger emergency bias shunt
+```bash
+# Compile the freestanding C microkernel into shbt_reference.so
+python3 cli/main.py build-kernel
+
+# Execute multi-physics FEA and MPS QEC co-simulation
+python3 cli/main.py sim
+
+# Export GDSII masks and Touchstone S2P interposer files
+python3 cli/main.py export-eda
+
+# Run Z3 formal verification proofs and Pytest closed-loop testbench
+python3 cli/main.py verify
+
 ```
 
-If detuning breaches $\delta_\Phi \ge 10^{-12}$, an electro-optic bias shunt drops DAC control power to zero within 2.5 ns, preventing microcavity quenches and preserving lattice boundary invariants.
-
 ---
 
-## 6. Build, Verification, and Execution
+## 6. Build, Verification, and Testing
 
 ### 6.1 Prerequisites
-- Python 3.10+ with `numpy`, `scipy`, and `z3-solver`.
-- C compiler with AVX-512 support (`gcc` $\ge 10$ or `clang` $\ge 11$).
 
-### 6.2 Running the Verification Suite
-To execute the complete end-to-end multi-physics and bare-metal runtime verification suite:
+* Python 3.10+ with `numpy`, `scipy`, `pytest`, `gdsfactory`, and `z3-solver`.
+
+
+* GCC $\ge 10$ or Clang $\ge 11$ with AVX-512 support (`-mavx512f`).
+
+
+
+### 6.2 Master Test Suite
+
+To run the master test runner across all 7 verification sub-suites:
 
 ```bash
-python tests/run_all_tests.py
+python3 tests/run_all_tests.py
+
 ```
 
-To run specific subsystem modules individually:
+### 6.3 Manual Module Verification
 
 ```bash
-# 1. Multi-physics thermal and FEA simulation
-python simulator/multi_physics/thermal_fea_sp_sim.py
+# 1. Test freestanding C microkernel reference driver
+gcc -O3 -std=c11 -I kernel/include tests/reference_test.c kernel/src/shbt_user_mmio.c -o ref_test && ./ref_test
 
-# 2. Photonic CAD and SPC yield engine
-python simulator/cad_yield/spc_photonic_cad.py
+# 2. Run Z3 formal verification proofs
+python3 formal/formal_verification.py
 
-# 3. Hardware-in-the-loop MPS QEC syndrome decoder
-python simulator/hil_qec/hil_mps_qec.py
+# 3. Run closed-loop quench recovery Pytest suite
+pytest simulator/hil_qec/test_closed_loop_quench.py
 
-# 4. Formal Z3 verification checks
-python formal/formal_verification.py
 ```
 
-### 6.3 Compiling and Testing the C Reference Kernel
-To compile and execute the reference microkernel runtime test driver:
-
-```bash
-gcc -O3 -mavx512f -mavx512bw -I kernel/include tests/reference_test.c -o reference_test
-./reference_test
 ```
