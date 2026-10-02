@@ -22,9 +22,9 @@ The SHBT-R architecture models a 312-channel synthetic frequency photonic quantu
 ---
 ## System Topology
 ```
-╭────────────────────────────────────────────────────────────────────────────────────╮
-│        SHBT-R 312-CHANNEL PHOTONIC QUANTUM PROCESSOR & RUNTIME TOPOLOGY            │
-╰────────────────────────────────────────────────────────────────────────────────────╯
+ ╭────────────────────────────────────────────────────────────────────────────────────╮
+ │        SHBT-R 312-CHANNEL PHOTONIC QUANTUM PROCESSOR & RUNTIME TOPOLOGY            │
+ ╰────────────────────────────────────────────────────────────────────────────────────╯
 
  ┌── [ 1. PARAMETRIC SQUEEZING & PHOTONIC PROCESSOR CORE ] ───────────────────────────┐
  │                                                                                    │
