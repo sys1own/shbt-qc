@@ -20,6 +20,68 @@ The SHBT-R architecture models a 312-channel synthetic frequency photonic quantu
 - **Hardware Register Contract**: Normative `SHBT-MMIO-1` interface at base address `0x70000000` spanning 56 bytes (`0x00`-`0x34`).
 
 ---
+## System Topology
+```
+╭────────────────────────────────────────────────────────────────────────────────────╮
+│        SHBT-R 312-CHANNEL PHOTONIC QUANTUM PROCESSOR & RUNTIME TOPOLOGY            │
+╰────────────────────────────────────────────────────────────────────────────────────╯
+
+ ┌── [ 1. PARAMETRIC SQUEEZING & PHOTONIC PROCESSOR CORE ] ───────────────────────────┐
+ │                                                                                    │
+ │  ╭────────────────────────────────────╮    36 GHz TMSV     ╭─────────────────────╮ │
+ │  │ 72 GHz Dynamical Casimir Pump      │── Squeezed Vacuum─►│ 52 Hexamer Arrays   │ │
+ │  │ • Non-degenerate Josephson drive   │   (r = 1.52 Seed)  │ • 312 Active InP Ch │ │
+ │  │ • Sub-SQL quadrature displacement  │                    │ • 24 Spare Channels │ │
+ │  ╰────────────────────────────────────╯                    │ • 336 Total Fab PIC │ │
+ │                                                            ╰─────────┬───────────╯ │
+ │   Boundary Isometry Defect Limit: ‖W†W − P_code‖_op ≤ 3.430×10⁻³     │ Optical     │
+ │   Canonical WZW Branch: (k_l, k_q, K) = (26, 8, 312) | c_vis=1325/154│ Modes       │
+ └──────────────────────────────────────────────────────────────────────┼─────────────┘
+                                                                        ▼
+ ┌── [ 2. CRYOGENIC & PHONONIC SUBSTRATE INTERFACE ] ─────────────────────────────────┐
+ │                                                                                    │
+ │  ╭──────────────────────────────────────────────────────────────────────────────╮  │
+ │  │ 4.2 K Liquid Helium-4 Thermal Bath (T_ambient = 4.200 K)                     │  │
+ │  ╰──────────────────────────────────────┬───────────────────────────────────────╯  │
+ │                                         │ Kapitza Boundary: α_K = 142.0 W/(m²·K⁴)  │
+ │                                         ▼                                          │
+ │  ╭──────────────────────────────────────────────────────────────────────────────╮  │
+ │  │ Nanoporous Silica Aerogel Quarter-Wave Matching Layer                        │  │
+ │  │ • Thickness: d_m = 6.395 nm | Acoustic Impedance: Z_m = 1.1512 MRayl         │  │
+ │  ╰──────────────────────────────────────┬───────────────────────────────────────╯  │
+ │                                         │ Acoustic Reflection Suppressed           │
+ │                                         ▼                                          │
+ │  ╭──────────────────────────────────────────────────────────────────────────────╮  │
+ │  │ Single-Crystal Sapphire Acoustic Reservoir Substrate                         │  │
+ │  │ • Acoustic Impedance: Z_sapphire = 44.178 MRayl | Volume V_sub ≥ 1911 cm³    │  │
+ │  │ • Acoustic Transients Damped: τ_decay ≤ 110.00 ns (Brittle σ_max < 350 MPa)  │  │
+ │  ╰──────────────────────────────────────────────────────────────────────────────╯  │
+ └────────────────────────────────────────────────────────────────────────────────────┘
+
+ ┌── [ 3. 2,112-BYTE ZERO-HEAP STINESPRING ARENA (.stinespring_frame) ] ──────────────┐
+ │                                                                                    │
+ │  0x000                                0x280                                 0x840  │
+ │  ╭──────────────────────────────────────┬───────────────────────────────────────╮  │
+ │  │ ACTIVE VISIBLE REGISTER (η_A = 10/33)│ TOPOLOGICAL DARK LEDGER (η_D = 23/33) │  │
+ │  │ • Capacity: 640 Bytes (10 Cachelines)│ • Capacity: 1,472 Bytes (23 Cachelines│  │
+ │  │ • 160 × binary32 Active Channel Amps │ • 124 × 8-Byte Fibonacci Descriptors  │  │
+ │  │ • Trace Preserving: Δ_norm < 10⁻¹²⁰  │ • 480 Bytes SECDED & Syndrome Metadata│  │
+ │  ╰──────────────────────────────────────┴───────────────────────────────────────╯  │
+ │   Strict 64-Byte Cacheline Alignment | NOLOAD Working Memory Section in SRAM       │
+ └───────────────────────────────────────────────────┬────────────────────────────────┘
+                                                     │ Memory-Mapped Telemetry
+                                                     ▼
+ ┌── [ 4. FREESTANDING C11 shbt-os RUNTIME (SHBT-MMIO-1 @ 0x70000000) ] ──────────────┐
+ │                                                                                    │
+ │  0x00: CR0_CTRL       0x08: DET_MU_HI     0x18: RF_PHASE_V    0x24: ECC_SYNDROME   │
+ │  0x04: SR0_STAT       0x0C: DET_MU_LO     0x1C: SHUNT_TRIG    0x2C: REMAP_SRC/DST  │
+ │  ────────────────────────────────────────────────────────────────────────────────  │
+ │  • Hardware Interface: 56-Byte Register Standard Spanning Offsets 0x00 to 0x34     │
+ │  • Deterministic Quench Recovery: t_rec ≤ 120.00 ns (Phase Loop Lock in 9.24 ns)   │
+ │  • SECDED Hamming(72,64) ECC: Single-bit correct, double-bit detect on registers   │
+ │  • AVX-512 Real-Time Remapping: Vectorized O(1) Givens rotation spare replacement  │
+ ╰────────────────────────────────────────────────────────────────────────────────────╯
+```
 
 ## 2. Repository Layout
 
