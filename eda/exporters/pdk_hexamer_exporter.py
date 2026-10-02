@@ -104,7 +104,7 @@ def export_gds(
     **kwargs,
 ) -> pathlib.Path:
     """Write the hexamer PDK layout to a GDSII file."""
-    gf.gpdk.PDK.activate()
+    gf.generic_tech.get_generic_pdk().activate()
     component = hexamer_pdk_component(**kwargs)
     if output_path is None:
         output_path = pathlib.Path(__file__).with_suffix(".gds")
